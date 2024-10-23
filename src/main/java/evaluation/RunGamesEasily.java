@@ -17,6 +17,7 @@ import players.mcts.MCTSPlayer;
 import players.rmhc.RMHCPlayer;
 import players.simple.OSLAPlayer;
 import players.simple.RandomPlayer;
+import players.simple.SuperOSLAPlayer;
 import utilities.Pair;
 
 import java.io.File;
@@ -31,7 +32,7 @@ import static evaluation.RunArg.*;
 import static java.util.stream.Collectors.toList;
 
 
-public class RunGames implements IGameRunner {
+public class RunGamesEasily implements IGameRunner {
 
     // Config
     Map<RunArg, Object> config = new HashMap<>();
@@ -53,7 +54,7 @@ public class RunGames implements IGameRunner {
         }
 
         /* 1. Settings for the tournament */
-        RunGames runGames = new RunGames();
+        RunGamesEasily runGames = new RunGamesEasily();
         runGames.config = parseConfig(args, Collections.singletonList(Usage.RunGames));
 
         String setupFile = runGames.config.getOrDefault(RunArg.config, "").toString();
@@ -82,11 +83,12 @@ public class RunGames implements IGameRunner {
         if (!runGames.config.get(playerDirectory).equals("")) {
             agents.addAll(PlayerFactory.createPlayers((String) runGames.config.get(playerDirectory)));
         } else {
-       //     agents.add(new MCTSPlayer());
+            agents.add(new MCTSPlayer());
             agents.add(new BasicMCTSPlayer());
             agents.add(new RandomPlayer());
-            agents.add(new RMHCPlayer());
+//            agents.add(new RMHCPlayer());
             agents.add(new OSLAPlayer());
+//            agents.add(new SuperOSLAPlayer());
         }
         runGames.agents = agents;
         System.out.println("Agents: " + agents);
@@ -98,7 +100,10 @@ public class RunGames implements IGameRunner {
         runGames.gamesAndPlayerCounts.put(GameType.SushiGo, new int[]{2});
         System.out.println("Games: " + runGames.gamesAndPlayerCounts.keySet());
 
+        runGames.config.put(matchups, 100);
+
         // print out the config
+        runGames.config.put(verbose, true);
         System.out.println("Config: " + runGames.config);
 
         if (!runGames.config.get(focusPlayer).equals("")) {
