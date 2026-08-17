@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Immutable physical tile template loaded from tiles.json. */
-public record TileDefinition(String id, int width, int height, List<Cell> cells, List<Port> ports) {
+public record TileDefinition(String id, int width, int height, List<Cell> cells, List<Port> ports)
+        implements PieceDefinition {
     public TileDefinition {
         cells = List.copyOf(cells);
         ports = List.copyOf(ports);
@@ -13,6 +14,8 @@ public record TileDefinition(String id, int width, int height, List<Cell> cells,
     }
 
     public Cell cellAt(int x, int y) { return cells.get(y * width + x); }
+
+    @Override public PieceInventory inventory() { return PieceInventory.one(PieceInventory.physicalId(id)); }
 
     public RotatedTile rotate(int quarterTurns) {
         int turns = Math.floorMod(quarterTurns, 4);

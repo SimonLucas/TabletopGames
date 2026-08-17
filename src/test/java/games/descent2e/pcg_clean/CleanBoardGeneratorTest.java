@@ -1,6 +1,7 @@
 package games.descent2e.pcg_clean;
 
 import games.descent2e.pcg_clean.data.*;
+import games.descent2e.pcg_clean.composition.*;
 import games.descent2e.pcg_clean.domain.*;
 import games.descent2e.pcg_clean.evaluation.*;
 import games.descent2e.pcg_clean.evaluation.constraints.*;
@@ -65,6 +66,88 @@ public class CleanBoardGeneratorTest {
         assertEquals(full.origins().get(1).y() + 1, zero.origins().get(1).y());
         assertFalse(zero.cells().containsValue(Cell.OPEN));
         assertTrue(full.cells().containsValue(Cell.OPEN));
+    }
+
+    @Test
+    public void composedMacroBehavesLikeAVariableSizedAtomicPiece() throws Exception {
+        TileCatalog atomic = new TileCatalogLoader().load(tiles);
+        TileDefinition tile = atomic.require("2A");
+        Port north = tile.ports().stream().filter(port -> port.direction() == Direction.NORTH)
+                .findFirst().orElseThrow();
+        Port south = tile.ports().stream().filter(port -> port.direction() == Direction.SOUTH)
+                .findFirst().orElseThrow();
+        GridPoint secondOrigin = games.descent2e.pcg_clean.layout.PortGeometry.attachedOrigin(
+                north, new GridPoint(0, 0), south, ConnectorDepth.ZERO);
+        MacroPieceDefinition macro = new MacroPieceComposer().compose("double-2A", List.of(
+                        new MacroPlacement(0, tile, 0, 0, 0),
+                        new MacroPlacement(1, tile, secondOrigin.x(), secondOrigin.y(), 0)),
+                List.of(new MacroConnection(0, north.index(), 1, south.index())));
+
+        assertEquals(2, macro.inventory().quantities().get("2").intValue());
+        assertEquals(2, macro.metrics().atomicPieces());
+        assertEquals(2, macro.ports().size());
+        assertFalse(macro.canonicalSignature().isBlank());
+        assertEquals(macro.width(), macro.rotate(1).height());
+        assertEquals(macro.height(), macro.rotate(1).width());
+
+        Port macroPort = macro.ports().get(0);
+        Port atomicPort = tile.ports().stream()
+                .filter(port -> port.direction() == macroPort.direction().opposite()).findFirst().orElseThrow();
+        CompositePieceCatalog catalog = new CompositePieceCatalog(atomic, List.of(macro));
+        BoardGenome genome = new BoardGenome(List.of(
+                new PlacedTile(0, macro.id(), 0), new PlacedTile(1, tile.id(), 0)),
+                List.of(new TileConnection(0, macroPort.index(), 1, atomicPort.index())));
+        BoardLayout layout = new BoardLayoutEngine(catalog).layout(genome);
+
+        assertTrue(layout.assembled());
+        assertFalse(layout.cells().containsValue(Cell.OPEN));
+
+        MacroPieceLibrary library = new MacroPieceLibrary(new MacroStructureDescriptor(6, 6));
+        assertTrue(library.offer(new MacroCandidate(1, macro, 0, 0.75)));
+        assertFalse("Canonical geometry should be stored only once",
+                library.offer(new MacroCandidate(2, macro, 0, 0.90)));
+        assertEquals(1, library.definitions().size());
+        assertEquals(2, library.snapshot().axes().size());
+        assertTrue(library.snapshot().elites().containsKey(
+                new games.descent2e.pcg_clean.qd.BehaviorCell(List.of(2, 2))));
+
+        List<MacroPieceDefinition> grafts = new MacroGraftOperator().graft("triple", macro, tile);
+        assertFalse(grafts.isEmpty());
+        assertTrue(grafts.stream().allMatch(graft -> graft.inventory().totalPieces() == 3));
+        assertTrue(grafts.stream().allMatch(graft -> graft.internalConnections().size() == 1));
+    }
+
+    @Test
+    public void inventoryCanBeIgnoredHardLimitedOrSoftlyPenalised() {
+        PieceInventory used = new PieceInventory(java.util.Map.of("2", 3, "entrance1", 1));
+        PieceInventory available = new PieceInventory(java.util.Map.of("2", 1, "entrance1", 1));
+        InventoryAssessment assessment = InventoryAssessment.compare(used, available);
+        assertEquals(2, assessment.totalExcess());
+        assertEquals(1, assessment.exceededTypes());
+        assertFalse(assessment.withinLimits());
+        assertEquals(1.0 / 3.0, assessment.score(), 0.000001);
+        assertEquals(3, InventoryPolicy.values().length);
+    }
+
+    @Test
+    public void macroEvolutionBuildsABoundedDeterministicQualityArchive() throws Exception {
+        TileCatalog catalog = new TileCatalogLoader().load(tiles);
+        List<TileDefinition> seeds = catalog.all().stream()
+                .filter(tile -> !tile.id().toLowerCase().startsWith("entrance"))
+                .limit(8).toList();
+        MacroEvolutionConfig config = new MacroEvolutionConfig(12, 12, 3, 9988L,
+                InventoryPolicy.IGNORE, PieceInventory.empty());
+        MacroPieceLibrary firstLibrary = new MacroPieceLibrary(new MacroStructureDescriptor(5, 6));
+        MacroPieceLibrary secondLibrary = new MacroPieceLibrary(new MacroStructureDescriptor(5, 6));
+
+        var first = new MacroEvolutionEngine(seeds, config, firstLibrary).run();
+        var second = new MacroEvolutionEngine(seeds, config, secondLibrary).run();
+
+        assertFalse(first.elites().isEmpty());
+        assertTrue(first.elites().size() <= 30);
+        assertEquals(first, second);
+        assertTrue(first.elites().values().stream()
+                .allMatch(candidate -> candidate.definition().inventory().totalPieces() <= 3));
     }
 
     @Test

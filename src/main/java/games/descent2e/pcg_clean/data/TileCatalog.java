@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class TileCatalog {
+public final class TileCatalog implements PieceCatalog {
     private final Map<String, TileDefinition> byId;
     private final List<TileDefinition> ordered;
 

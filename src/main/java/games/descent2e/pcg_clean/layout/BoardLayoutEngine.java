@@ -1,18 +1,18 @@
 package games.descent2e.pcg_clean.layout;
 
-import games.descent2e.pcg_clean.data.TileCatalog;
+import games.descent2e.pcg_clean.data.PieceCatalog;
 import games.descent2e.pcg_clean.domain.*;
 
 import java.util.*;
 
 /** Derives a grid embedding and a piece graph from a compact genome. */
 public final class BoardLayoutEngine {
-    private final TileCatalog catalog;
+    private final PieceCatalog catalog;
     private final ConnectorDepth connectorDepth;
 
-    public BoardLayoutEngine(TileCatalog catalog) { this(catalog, ConnectorDepth.ZERO); }
+    public BoardLayoutEngine(PieceCatalog catalog) { this(catalog, ConnectorDepth.ZERO); }
 
-    public BoardLayoutEngine(TileCatalog catalog, ConnectorDepth connectorDepth) {
+    public BoardLayoutEngine(PieceCatalog catalog, ConnectorDepth connectorDepth) {
         this.catalog = catalog;
         this.connectorDepth = Objects.requireNonNull(connectorDepth);
     }

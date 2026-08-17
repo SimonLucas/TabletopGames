@@ -94,6 +94,12 @@ The JSON `open` cells describe port direction, width and position, but do not oc
 
 No framework objects should be introduced into these classes. Once the representation and rules are mature, add a separate adapter such as `GraphBoardAdapter` that translates a feasible `BoardGenome`/`BoardLayout` into Tabletop Games components.
 
+## Composable macro-pieces
+
+The `composition` package provides the first executable macro-piece layer. Atomic tiles and compiled macros implement the same `PieceDefinition` geometry contract, so both can be rotated, connected through zero-depth ports and placed by `BoardLayoutEngine`. Composition flattens cells and inventory, consumes internal ports, exposes the remaining ports, rejects overlap and produces a rotation-independent canonical signature.
+
+`MacroEvolutionEngine` grows reusable definitions with valid-by-construction port grafts and stores them in a bounded generic quality-diversity archive. Inventory can be ignored, enforced as a hard limit or treated as a soft quality penalty. See [MACRO_ARCHITECTURE.md](MACRO_ARCHITECTURE.md) for invariants, current capabilities and the expanded-provenance work required before macro instances participate in every atomic board-level graph metric.
+
 ## Alternative absolute-coordinate generator
 
 The `spatial` package contains a second, independent evolutionary representation. It does not encode a connection graph. Instead, the chromosome has one fixed gene for every physical Descent component:

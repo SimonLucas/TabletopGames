@@ -1,6 +1,6 @@
 package games.descent2e.pcg_clean.layout;
 
-import games.descent2e.pcg_clean.data.TileCatalog;
+import games.descent2e.pcg_clean.data.PieceCatalog;
 import games.descent2e.pcg_clean.domain.*;
 
 import java.util.HashSet;
@@ -12,14 +12,14 @@ public final class PortGeometry {
 
     public static boolean aligned(PlacedTile first, GridPoint firstOrigin, int firstPort,
                                   PlacedTile second, GridPoint secondOrigin, int secondPort,
-                                  TileCatalog catalog) {
+                                  PieceCatalog catalog) {
         return aligned(first, firstOrigin, firstPort, second, secondOrigin, secondPort,
                 catalog, ConnectorDepth.ZERO);
     }
 
     public static boolean aligned(PlacedTile first, GridPoint firstOrigin, int firstPort,
                                   PlacedTile second, GridPoint secondOrigin, int secondPort,
-                                  TileCatalog catalog, ConnectorDepth connectorDepth) {
+                                  PieceCatalog catalog, ConnectorDepth connectorDepth) {
         Port a = catalog.require(first.tileId()).rotate(first.quarterTurns()).port(firstPort);
         Port b = catalog.require(second.tileId()).rotate(second.quarterTurns()).port(secondPort);
         if (a.direction() != b.direction().opposite() || a.cells().size() != b.cells().size()) return false;
