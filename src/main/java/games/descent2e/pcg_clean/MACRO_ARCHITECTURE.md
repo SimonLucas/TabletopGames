@@ -39,14 +39,29 @@ Geometry and inventory policy remain independent.
 
 The generic `qd` package provides N-dimensional `BehaviorCell`, axis metadata, a typed descriptor and a bounded one-elite-per-cell `QualityArchive`. It does not depend on spatial chromosomes or the existing two-dimensional board heatmap.
 
-The initial macro descriptor indexes:
+The initial scale/interface descriptor indexes atomic-piece count and exposed-port count. Complete hierarchical runs use `MacroShapeDescriptor` instead, because scale/interface alone strongly favours repeated straight modules and cannot distinguish them from bent compositions. Its axes are:
 
-- number of atomic physical pieces;
-- number of exposed ports.
+- **axial balance**: minor bounding extent divided by major extent, separating elongated modules from shapes occupying both axes;
+- **compactness**: occupied terrain divided by bounding-box area, separating sparse/L-shaped modules from filled room-like modules.
+
+Atomic count, exposed ports and directional port diversity remain intrinsic metrics and influence macro quality. They do not consume the two visible shape-diversity axes.
 
 `PieceMetrics` also stores traversable size, extent, compactness, directional port counts, hierarchical branch/cycle counts, terrain composition and inventory. Further descriptors can index any combination without recompiling a macro.
 
 `MacroEvolutionEngine` is a deterministic bounded demonstration. It selects atomic or archived definitions, uses `MacroGraftOperator` to enumerate valid one-port attachments, filters by maximum atomic size and inventory policy, and offers one seeded choice to the macro archive. `MacroPieceLibrary` retains only archive elites, so storage is bounded by the descriptor grid.
+
+### Catalogue maintenance and feedback
+
+`MacroPieceLibrary` is also the maintained catalogue used by hierarchical board evolution. Each active archive elite has immutable `MacroUsageStatistics` recording:
+
+- graft attempts and successful grafts;
+- admissions to the board archive;
+- feasible board admissions;
+- cumulative and mean admitted-board fitness.
+
+The catalogue owns a mutable signature-to-statistics map and replaces an immutable statistics value after each event. Published values and snapshots therefore never change behind a reader's back. When a macro loses its QD niche, its statistics are removed; catalogue definitions and feedback storage are both bounded by the number of macro niches.
+
+Usage is deliberately diagnostic in the first engine. It does not yet change parent probability, allowing intrinsic macro quality and downstream utility to be compared before feedback becomes selection pressure. A later curiosity/utility emitter can sample by graft success, feasible admissions or niche discovery without changing catalogue storage.
 
 ## Expanded physical evaluation
 
@@ -69,4 +84,26 @@ That provenance now enables the next operator and engine layer:
 
 Intrinsic hierarchical branch/cycle metrics remain useful for inexpensive macro-library indexing. Complete board selection must use `ExpandedBoardEvaluation`, whose physical metrics are exact.
 
-The next executable milestone is a macro-board MAP-Elites engine: seed entrance/exit assemblies, emit one-port grafts and two-port splices from archived macros, evaluate through `ExpandedBoardEvaluator`, and archive through `ExpandedGraphStructureDescriptor`. No further representation change is required for that run.
+## Complete hierarchical runs
+
+`HierarchicalMacroEvolutionEngine` co-evolves the macro catalogue and a complete-board MAP-Elites archive:
+
+1. bootstrap the catalogue from non-role atomic definitions;
+2. seed boards by placing an extensible three-or-more-port module between the one-port entrance and exit;
+3. select an archived complete board;
+4. graft either an atomic piece or an active catalogue macro onto an exposed board port;
+5. expand the child to its physical atomic graph;
+6. evaluate all board constraints, quality criteria and inventory policy;
+7. offer it to physical branch/cycle niches;
+8. record catalogue graft and board-admission outcomes.
+
+Complete boards are currently represented as one root macro. This keeps every emitted board connected and makes copying a proven assembly constant at the genetic level, while physical evaluation remains exact. An ordinary graft uses one port pair as its placement anchor and consumes every other unambiguous coincident pair in that placement. It can therefore discover natural cycles without a special splice. Catalogue proposal pairing preserves reusable cyclic modules, and board mutation targets them until a non-zero cycle niche exists. A future two-port splice can add more deliberate loop construction rather than being the only route to cycles.
+
+Entrance and exit are terminal one-port definitions. Connecting them directly would consume both ports and create a sealed two-piece macro that no emitter could extend. Bootstrap therefore uses a smallest available intermediate module with at least three exposed ports and accepts only initial boards that retain a public port. Choosing the smallest module preserves atomic-piece budget for later macro insertion. These invariants are covered by an end-to-end test which also requires evolution beyond bootstrap, catalogue-module admission, reusable cyclic macros and a non-zero board-cycle niche.
+
+Run `games.descent2e.pcg_clean.ui.HierarchicalMacroBoardApplication` to execute the default 2,000-iteration demonstration. Evolution runs off the Swing thread and publishes immutable, coalesced snapshots to two live clickable heatmaps:
+
+- physical board branching × independent cycles;
+- macro axial balance × compactness.
+
+Each occupied board niche opens its expanded physical elite. Each occupied macro niche opens the expanded catalogue definition and displays intrinsic quality, atomic size and exposed-port measurements. Painting and clicking do not consume randomness or affect deterministic evolution.

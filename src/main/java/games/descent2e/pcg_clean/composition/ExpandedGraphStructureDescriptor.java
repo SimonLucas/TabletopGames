@@ -19,7 +19,9 @@ public final class ExpandedGraphStructureDescriptor implements QualityDescriptor
     public BehaviorCell describe(ExpandedBoardCandidate candidate) {
         Map<Integer, Set<Integer>> graph = candidate.evaluation().expanded().layout().graph();
         int branches = (int) graph.values().stream().filter(neighbours -> neighbours.size() >= 3).count();
-        int edges = graph.values().stream().mapToInt(Set::size).sum() / 2;
+        // Distinct ports may connect the same pair of physical pieces. The neighbour graph
+        // intentionally collapses those parallel edges, but each is topology-bearing for E-V+C.
+        int edges = candidate.evaluation().expanded().genome().connections().size();
         int cycles = Math.max(0, edges - graph.size() + components(graph));
         return new BehaviorCell(List.of(Math.min(branches, BRANCH_BINS - 1),
                 Math.min(cycles, CYCLE_BINS - 1)));

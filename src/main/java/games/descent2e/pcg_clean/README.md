@@ -102,6 +102,8 @@ The `composition` package provides the first executable macro-piece layer. Atomi
 
 Every exposed macro port retains descendant provenance. `MacroBoardExpander` recursively reconstructs the atomic piece graph through nested rotations, and `ExpandedBoardEvaluator` applies existing board constraints and fitness criteria to that physical graph. Entrance/exit roles, paths, branching, cycles, terrain, cells and inventory therefore remain exact when the genetic board contains macros. See [MACRO_ARCHITECTURE.md](MACRO_ARCHITECTURE.md) for invariants and the next macro-board MAP-Elites integration.
 
+Run `games.descent2e.pcg_clean.ui.HierarchicalMacroBoardApplication` for a complete hierarchical MAP-Elites demonstration. It co-evolves a bounded macro catalogue and complete boards, expands every board before evaluation, and records catalogue graft/admission statistics. Two live clickable heatmaps show physical board branching × cycles and macro axial balance × compactness; the latter deliberately separates elongated, bent/sparse and filled module shapes. Bootstrap uses a smallest extensible module between the terminal one-port entrance and exit, guaranteeing both an exposed growth port and headroom for later macro grafts. An anchored graft connects every unambiguous coincident port pair, so ordinary mutation can discover natural cycles; a future two-port splice remains useful for deliberately targeting more loop niches.
+
 ## Alternative absolute-coordinate generator
 
 The `spatial` package contains a second, independent evolutionary representation. It does not encode a connection graph. Instead, the chromosome has one fixed gene for every physical Descent component:

@@ -165,6 +165,74 @@ public class CleanBoardGeneratorTest {
     }
 
     @Test
+    public void macroShapeDescriptorSeparatesStraightAndBentAssemblies() throws Exception {
+        TileCatalog catalog = new TileCatalogLoader().load(tiles);
+        TileDefinition centre = catalog.require("1A");
+        TileDefinition arm = catalog.require("2A");
+        Port centreNorth = centre.ports().stream().filter(port -> port.direction() == Direction.NORTH)
+                .findFirst().orElseThrow();
+        Port centreSouth = centre.ports().stream().filter(port -> port.direction() == Direction.SOUTH)
+                .findFirst().orElseThrow();
+        Port centreEast = centre.ports().stream().filter(port -> port.direction() == Direction.EAST)
+                .findFirst().orElseThrow();
+        Port armNorth = arm.ports().stream().filter(port -> port.direction() == Direction.NORTH)
+                .findFirst().orElseThrow();
+        Port armSouth = arm.ports().stream().filter(port -> port.direction() == Direction.SOUTH)
+                .findFirst().orElseThrow();
+        GridPoint northOrigin = games.descent2e.pcg_clean.layout.PortGeometry.attachedOrigin(
+                centreNorth, new GridPoint(0, 0), armSouth, ConnectorDepth.ZERO);
+        GridPoint southOrigin = games.descent2e.pcg_clean.layout.PortGeometry.attachedOrigin(
+                centreSouth, new GridPoint(0, 0), armNorth, ConnectorDepth.ZERO);
+        RotatedTile rotatedArm = arm.rotate(1);
+        Port armWest = rotatedArm.ports().stream().filter(port -> port.direction() == Direction.WEST)
+                .findFirst().orElseThrow();
+        GridPoint eastOrigin = games.descent2e.pcg_clean.layout.PortGeometry.attachedOrigin(
+                centreEast, new GridPoint(0, 0), armWest, ConnectorDepth.ZERO);
+        MacroPieceComposer composer = new MacroPieceComposer();
+        MacroPieceDefinition straight = composer.compose("straight", List.of(
+                        new MacroPlacement(0, centre, 0, 0, 0),
+                        new MacroPlacement(1, arm, northOrigin.x(), northOrigin.y(), 0),
+                        new MacroPlacement(2, arm, southOrigin.x(), southOrigin.y(), 0)),
+                List.of(new MacroConnection(0, centreNorth.index(), 1, armSouth.index()),
+                        new MacroConnection(0, centreSouth.index(), 2, armNorth.index())));
+        MacroPieceDefinition bent = composer.compose("bent", List.of(
+                        new MacroPlacement(0, centre, 0, 0, 0),
+                        new MacroPlacement(1, arm, northOrigin.x(), northOrigin.y(), 0),
+                        new MacroPlacement(2, arm, eastOrigin.x(), eastOrigin.y(), 1)),
+                List.of(new MacroConnection(0, centreNorth.index(), 1, armSouth.index()),
+                        new MacroConnection(0, centreEast.index(), 2, armWest.index())));
+        MacroShapeDescriptor descriptor = new MacroShapeDescriptor(6, 6);
+
+        assertNotEquals(descriptor.describe(new MacroCandidate(1, straight, 0, 0.5)),
+                descriptor.describe(new MacroCandidate(2, bent, 0, 0.5)));
+    }
+
+    @Test
+    public void anchoredGraftClosesAdditionalCoincidentPortsIntoANaturalCycle() {
+        int width = 3, height = 6;
+        List<Cell> fixedCells = new java.util.ArrayList<>(java.util.Collections.nCopies(width * height, Cell.VOID));
+        List<Cell> donorCells = new java.util.ArrayList<>(java.util.Collections.nCopies(width * height, Cell.VOID));
+        for (int y = 0; y < height; y++) {
+            fixedCells.set(y * width, Cell.PLAIN);
+            fixedCells.set(y * width + 1, Cell.PLAIN);
+            donorCells.set(y * width + 1, Cell.PLAIN);
+            donorCells.set(y * width + 2, Cell.PLAIN);
+        }
+        TileDefinition fixed = new TileDefinition("fixed", width, height, fixedCells, List.of(
+                new Port(0, Direction.EAST, List.of(new GridPoint(2, 1))),
+                new Port(1, Direction.EAST, List.of(new GridPoint(2, 4)))));
+        TileDefinition donor = new TileDefinition("donor", width, height, donorCells, List.of(
+                new Port(0, Direction.WEST, List.of(new GridPoint(0, 1))),
+                new Port(1, Direction.WEST, List.of(new GridPoint(0, 4)))));
+
+        MacroPieceDefinition loop = new MacroGraftOperator().graft("natural-loop", fixed, donor).stream()
+                .filter(macro -> macro.internalConnections().size() == 2).findFirst().orElseThrow();
+
+        assertEquals(1, loop.metrics().internalCycles());
+        assertTrue(loop.ports().isEmpty());
+    }
+
+    @Test
     public void expandedEvaluationFindsRolesAndDescriptorsInsideMacros() throws Exception {
         TileCatalog atomic = new TileCatalogLoader().load(tiles);
         TileDefinition entrance = atomic.all().stream()
@@ -192,6 +260,46 @@ public class CleanBoardGeneratorTest {
                 InventoryPolicy.HARD_LIMIT, PieceInventory.empty()).evaluate(genetic);
         assertFalse(unavailable.feasible());
         assertEquals(2, unavailable.inventoryAssessment().totalExcess());
+    }
+
+    @Test
+    public void hierarchicalEvolutionRunsCompleteBoardsAndMaintainsABoundedCatalogue() throws Exception {
+        TileCatalog tiles = new TileCatalogLoader().load(this.tiles);
+        HierarchicalEvolutionConfig config = new HierarchicalEvolutionConfig(
+                40, 500, 12, 6, 0.40, 0.70, 424242L,
+                InventoryPolicy.IGNORE, PieceInventory.empty());
+
+        HierarchicalEvolutionResult first = new HierarchicalMacroBoardGenerator(tiles).generate(config);
+        HierarchicalEvolutionResult second = new HierarchicalMacroBoardGenerator(tiles).generate(config);
+
+        assertEquals(first, second);
+        assertFalse(first.boards().elites().isEmpty());
+        assertTrue(first.boards().elites().size() <= 30);
+        assertTrue(first.macros().elites().size() <= 56);
+        assertEquals(first.macros().elites().size(), first.catalogue().size());
+        assertTrue(first.boards().elites().values().stream().allMatch(candidate -> {
+            ExpandedBoardEvaluation evaluation = candidate.evaluation();
+            long entrances = evaluation.expanded().genome().tiles().stream()
+                    .filter(tile -> tile.tileId().toLowerCase().startsWith("entrance")).count();
+            long exits = evaluation.expanded().genome().tiles().stream()
+                    .filter(tile -> tile.tileId().toLowerCase().startsWith("exit")).count();
+            int pieces = evaluation.expanded().genome().tiles().size();
+            return evaluation.feasible() && entrances == 1 && exits == 1 && pieces >= 3 && pieces <= 12;
+        }));
+        assertTrue("Evolution must grow beyond the three-piece bootstrap",
+                first.boards().elites().values().stream().mapToInt(candidate ->
+                        candidate.evaluation().expanded().genome().tiles().size()).max().orElse(0) > 3);
+        assertTrue(first.catalogue().stream().map(MacroCatalogueEntry::usage)
+                .mapToLong(MacroUsageStatistics::graftAttempts).sum() > 0);
+        assertTrue("At least one catalogue macro should contribute to an admitted board",
+                first.catalogue().stream().map(MacroCatalogueEntry::usage)
+                        .mapToLong(MacroUsageStatistics::boardAdmissions).sum() > 0);
+        assertTrue("The macro catalogue should discover a natural coincident-port cycle",
+                first.macros().elites().values().stream()
+                        .anyMatch(candidate -> candidate.definition().metrics().internalCycles() > 0
+                                && candidate.definition().metrics().exposedPorts() > 0));
+        assertTrue("Natural coincident-port closure should reach a non-zero cycle niche",
+                first.boards().elites().keySet().stream().anyMatch(cell -> cell.bins().get(1) > 0));
     }
 
     @Test

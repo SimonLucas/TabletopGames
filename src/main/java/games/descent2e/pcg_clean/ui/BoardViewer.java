@@ -22,15 +22,24 @@ public final class BoardViewer {
     private int index;
 
     public BoardViewer(List<BoardViewModel> boards, TileArtworkProvider artworkProvider) {
+        this("Descent board generator", boards, artworkProvider);
+    }
+
+    public BoardViewer(String title, List<BoardViewModel> boards, TileArtworkProvider artworkProvider) {
         if (boards.isEmpty()) throw new IllegalArgumentException("At least one board is required");
         this.boards = List.copyOf(boards);
         this.canvas = new BoardCanvas(BoardPalette.defaultPalette(), artworkProvider);
+        frame.setTitle(title);
         initialiseWindow();
         display(0);
     }
 
     public static void show(List<BoardViewModel> boards, TileArtworkProvider artworkProvider) {
-        Runnable create = () -> new BoardViewer(boards, artworkProvider).frame.setVisible(true);
+        show("Descent board generator", boards, artworkProvider);
+    }
+
+    public static void show(String title, List<BoardViewModel> boards, TileArtworkProvider artworkProvider) {
+        Runnable create = () -> new BoardViewer(title, boards, artworkProvider).frame.setVisible(true);
         if (SwingUtilities.isEventDispatchThread()) create.run();
         else SwingUtilities.invokeLater(create);
     }
