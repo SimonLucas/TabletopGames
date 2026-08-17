@@ -98,7 +98,9 @@ No framework objects should be introduced into these classes. Once the represent
 
 The `composition` package provides the first executable macro-piece layer. Atomic tiles and compiled macros implement the same `PieceDefinition` geometry contract, so both can be rotated, connected through zero-depth ports and placed by `BoardLayoutEngine`. Composition flattens cells and inventory, consumes internal ports, exposes the remaining ports, rejects overlap and produces a rotation-independent canonical signature.
 
-`MacroEvolutionEngine` grows reusable definitions with valid-by-construction port grafts and stores them in a bounded generic quality-diversity archive. Inventory can be ignored, enforced as a hard limit or treated as a soft quality penalty. See [MACRO_ARCHITECTURE.md](MACRO_ARCHITECTURE.md) for invariants, current capabilities and the expanded-provenance work required before macro instances participate in every atomic board-level graph metric.
+`MacroEvolutionEngine` grows reusable definitions with valid-by-construction port grafts and stores them in a bounded generic quality-diversity archive. Inventory can be ignored, enforced as a hard limit or treated as a soft quality penalty.
+
+Every exposed macro port retains descendant provenance. `MacroBoardExpander` recursively reconstructs the atomic piece graph through nested rotations, and `ExpandedBoardEvaluator` applies existing board constraints and fitness criteria to that physical graph. Entrance/exit roles, paths, branching, cycles, terrain, cells and inventory therefore remain exact when the genetic board contains macros. See [MACRO_ARCHITECTURE.md](MACRO_ARCHITECTURE.md) for invariants and the next macro-board MAP-Elites integration.
 
 ## Alternative absolute-coordinate generator
 

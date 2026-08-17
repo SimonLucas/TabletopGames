@@ -48,16 +48,18 @@ The initial macro descriptor indexes:
 
 `MacroEvolutionEngine` is a deterministic bounded demonstration. It selects atomic or archived definitions, uses `MacroGraftOperator` to enumerate valid one-port attachments, filters by maximum atomic size and inventory policy, and offers one seeded choice to the macro archive. `MacroPieceLibrary` retains only archive elites, so storage is bounded by the descriptor grid.
 
-## Important next integration
+## Expanded physical evaluation
 
-Board geometry already works with macro instances, but complete board evaluation must next distinguish two graphs:
+Complete board evaluation distinguishes two graphs:
 
 - the **genetic graph**, whose vertices may be macros;
 - the **expanded physical graph**, whose vertices are atomic cardboard pieces.
 
-Cell-based criteria already see flattened macro terrain correctly. Required entrance/exit roles, exact atomic branching/cycles, physical-piece path length and board inventory must use expanded provenance. The next model should therefore assign stable leaf paths to atomic descendants and retain, for each exposed macro port, the descendant atomic port from which it originated. Expansion can then reconstruct a `BoardGenome` of atomic instances without geometric inference.
+Every public macro port retains its immediate child-port source. `MacroBoardExpander` follows that lineage recursively, applies nested rotations, assigns stable depth-first atomic instance IDs and reconstructs every internal and board-level connection between atomic endpoints. It verifies the reconstructed origins against port-derived layout geometry rather than trusting provenance blindly.
 
-That provenance also enables:
+`ExpandedBoardEvaluator` sends this physical genome and layout through the existing constraint and fitness interfaces. Required entrance/exit roles, atomic graph paths, branches, cycles, terrain and cell measurements therefore work through arbitrary macro nesting. Inventory is flattened independently and may be ignored, hard-limited or softly penalised. `ExpandedGraphStructureDescriptor` indexes the generic QD archive with branches and cycles from the expanded graph.
+
+That provenance now enables the next operator and engine layer:
 
 - macro collapse and expansion mutations;
 - one-port donor graft crossover on connected subassemblies;
@@ -65,4 +67,6 @@ That provenance also enables:
 - attribution of board success back to contributing macros;
 - exact duplicate-inventory accounting under arbitrary nesting.
 
-Until expanded provenance is added, hierarchical branch/cycle metrics are suitable for macro-library exploration but should not replace flattened physical board metrics.
+Intrinsic hierarchical branch/cycle metrics remain useful for inexpensive macro-library indexing. Complete board selection must use `ExpandedBoardEvaluation`, whose physical metrics are exact.
+
+The next executable milestone is a macro-board MAP-Elites engine: seed entrance/exit assemblies, emit one-port grafts and two-port splices from archived macros, evaluate through `ExpandedBoardEvaluator`, and archive through `ExpandedGraphStructureDescriptor`. No further representation change is required for that run.

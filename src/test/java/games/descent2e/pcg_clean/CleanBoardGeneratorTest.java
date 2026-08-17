@@ -101,6 +101,11 @@ public class CleanBoardGeneratorTest {
 
         assertTrue(layout.assembled());
         assertFalse(layout.cells().containsValue(Cell.OPEN));
+        ExpandedBoard expanded = new MacroBoardExpander(catalog).expand(genome);
+        assertEquals(3, expanded.genome().tiles().size());
+        assertEquals(2, expanded.genome().connections().size());
+        assertEquals(3, expanded.inventory().totalPieces());
+        assertEquals(layout.traversableCellCount(), expanded.layout().traversableCellCount());
 
         MacroPieceLibrary library = new MacroPieceLibrary(new MacroStructureDescriptor(6, 6));
         assertTrue(library.offer(new MacroCandidate(1, macro, 0, 0.75)));
@@ -115,6 +120,15 @@ public class CleanBoardGeneratorTest {
         assertFalse(grafts.isEmpty());
         assertTrue(grafts.stream().allMatch(graft -> graft.inventory().totalPieces() == 3));
         assertTrue(grafts.stream().allMatch(graft -> graft.internalConnections().size() == 1));
+        MacroPieceDefinition nested = grafts.get(0);
+        CompositePieceCatalog nestedCatalog = new CompositePieceCatalog(atomic, List.of(macro, nested));
+        for (int turns = 0; turns < 4; turns++) {
+            ExpandedBoard rotatedExpansion = new MacroBoardExpander(nestedCatalog).expand(new BoardGenome(
+                    List.of(new PlacedTile(0, nested.id(), turns)), List.of()));
+            assertEquals(3, rotatedExpansion.genome().tiles().size());
+            assertEquals(2, rotatedExpansion.genome().connections().size());
+            assertTrue(rotatedExpansion.layout().assembled());
+        }
     }
 
     @Test
@@ -148,6 +162,36 @@ public class CleanBoardGeneratorTest {
         assertEquals(first, second);
         assertTrue(first.elites().values().stream()
                 .allMatch(candidate -> candidate.definition().inventory().totalPieces() <= 3));
+    }
+
+    @Test
+    public void expandedEvaluationFindsRolesAndDescriptorsInsideMacros() throws Exception {
+        TileCatalog atomic = new TileCatalogLoader().load(tiles);
+        TileDefinition entrance = atomic.all().stream()
+                .filter(tile -> tile.id().toLowerCase().startsWith("entrance")).findFirst().orElseThrow();
+        TileDefinition room = atomic.require("2A");
+        MacroPieceDefinition macro = new MacroGraftOperator().graft("entrance-module", entrance, room)
+                .stream().findFirst().orElseThrow();
+        CompositePieceCatalog definitions = new CompositePieceCatalog(atomic, List.of(macro));
+        BoardGenome genetic = new BoardGenome(List.of(new PlacedTile(0, macro.id(), 1)), List.of());
+        ExpandedBoardEvaluator evaluator = new ExpandedBoardEvaluator(definitions, atomic,
+                List.of(new RequiredTileRoleConstraint("entrance", 1)),
+                List.of(new TargetCellCountCriterion(macro.metrics().traversableCells(), 1.0)),
+                InventoryPolicy.HARD_LIMIT, macro.inventory());
+
+        ExpandedBoardEvaluation evaluation = evaluator.evaluate(genetic);
+        assertTrue(evaluation.feasible());
+        assertEquals(2, evaluation.expanded().genome().tiles().size());
+        assertEquals(0, evaluation.violationCount());
+        assertEquals(1.0, evaluation.fitness(), 0.000001);
+        ExpandedBoardCandidate candidate = new ExpandedBoardCandidate(1, genetic, evaluation);
+        assertEquals(List.of(0, 0), new ExpandedGraphStructureDescriptor().describe(candidate).bins());
+
+        ExpandedBoardEvaluation unavailable = new ExpandedBoardEvaluator(definitions, atomic,
+                List.of(new RequiredTileRoleConstraint("entrance", 1)), List.of(),
+                InventoryPolicy.HARD_LIMIT, PieceInventory.empty()).evaluate(genetic);
+        assertFalse(unavailable.feasible());
+        assertEquals(2, unavailable.inventoryAssessment().totalExcess());
     }
 
     @Test

@@ -8,6 +8,7 @@ import java.util.*;
 public record MacroPieceDefinition(String id, int width, int height, List<Cell> cells,
                                    List<Port> ports, List<MacroPlacement> children,
                                    List<MacroConnection> internalConnections,
+                                   List<MacroPortSource> portSources,
                                    PieceInventory inventory, PieceMetrics metrics,
                                    String canonicalSignature) implements PieceDefinition {
     public MacroPieceDefinition {
@@ -17,6 +18,12 @@ public record MacroPieceDefinition(String id, int width, int height, List<Cell> 
         ports = List.copyOf(ports);
         children = List.copyOf(children);
         internalConnections = List.copyOf(internalConnections);
+        portSources = List.copyOf(portSources);
+        if (portSources.size() != ports.size())
+            throw new IllegalArgumentException("Every macro port needs one child source");
+        for (int i = 0; i < portSources.size(); i++)
+            if (portSources.get(i).macroPort() != i)
+                throw new IllegalArgumentException("Macro port sources must follow stable port order");
         inventory = Objects.requireNonNull(inventory);
         metrics = Objects.requireNonNull(metrics);
         canonicalSignature = Objects.requireNonNull(canonicalSignature);

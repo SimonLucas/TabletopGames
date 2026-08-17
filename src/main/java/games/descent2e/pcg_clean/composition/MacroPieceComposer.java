@@ -10,6 +10,8 @@ import java.util.*;
 public final class MacroPieceComposer {
     private record PortRef(int instance, int port) {}
     private record Child(MacroPlacement placement, RotatedTile geometry, GridPoint origin) {}
+    private record ExposedPort(Port port, int childInstance, int childPort) {}
+    private record NormalizedPorts(List<Port> ports, List<MacroPortSource> sources) {}
 
     public MacroPieceDefinition compose(String id, List<MacroPlacement> placements,
                                         List<MacroConnection> connections) {
@@ -19,12 +21,13 @@ public final class MacroPieceComposer {
         ensureConnected(children.keySet(), connections);
 
         Map<GridPoint, Cell> occupied = mergeCells(children.values());
-        List<Port> exposed = exposedPorts(children.values(), consumed);
+        List<ExposedPort> exposed = exposedPorts(children.values(), consumed);
         Bounds bounds = bounds(occupied.keySet(), exposed);
         int width = bounds.maxX - bounds.minX + 1;
         int height = bounds.maxY - bounds.minY + 1;
         List<Cell> cells = denseCells(occupied, bounds, width, height);
-        List<Port> ports = normalizePorts(exposed, bounds);
+        NormalizedPorts normalizedPorts = normalizePorts(exposed, bounds);
+        List<Port> ports = normalizedPorts.ports();
         List<MacroPlacement> normalizedChildren = placements.stream().map(placement -> new MacroPlacement(
                 placement.instanceId(), placement.definition(), placement.x() - bounds.minX,
                 placement.y() - bounds.minY, placement.quarterTurns())).toList();
@@ -42,7 +45,7 @@ public final class MacroPieceComposer {
         PieceMetrics metrics = new PieceMetricCalculator().calculate(geometry, inventory, branches, cycles);
         String signature = canonicalSignature(geometry, inventory);
         return new MacroPieceDefinition(id, width, height, cells, ports, normalizedChildren,
-                connections, inventory, metrics, signature);
+                connections, normalizedPorts.sources(), inventory, metrics, signature);
     }
 
     private Map<Integer, Child> index(List<MacroPlacement> placements) {
@@ -112,20 +115,22 @@ public final class MacroPieceComposer {
         return result;
     }
 
-    private List<Port> exposedPorts(Collection<Child> children, Set<PortRef> consumed) {
-        List<Port> result = new ArrayList<>();
+    private List<ExposedPort> exposedPorts(Collection<Child> children, Set<PortRef> consumed) {
+        List<ExposedPort> result = new ArrayList<>();
         for (Child child : children) for (Port port : child.geometry.ports()) {
             if (consumed.contains(new PortRef(child.placement.instanceId(), port.index()))) continue;
-            result.add(new Port(-1, port.direction(), port.cells().stream().map(child.origin::plus).toList()));
+            result.add(new ExposedPort(new Port(-1, port.direction(),
+                    port.cells().stream().map(child.origin::plus).toList()),
+                    child.placement.instanceId(), port.index()));
         }
         return result;
     }
 
     private record Bounds(int minX, int minY, int maxX, int maxY) {}
 
-    private Bounds bounds(Set<GridPoint> occupied, List<Port> ports) {
+    private Bounds bounds(Set<GridPoint> occupied, List<ExposedPort> ports) {
         List<GridPoint> all = new ArrayList<>(occupied);
-        ports.forEach(port -> all.addAll(port.cells()));
+        ports.forEach(port -> all.addAll(port.port().cells()));
         return new Bounds(all.stream().mapToInt(GridPoint::x).min().orElseThrow(),
                 all.stream().mapToInt(GridPoint::y).min().orElseThrow(),
                 all.stream().mapToInt(GridPoint::x).max().orElseThrow(),
@@ -142,17 +147,25 @@ public final class MacroPieceComposer {
         return cells;
     }
 
-    private List<Port> normalizePorts(List<Port> ports, Bounds bounds) {
-        Comparator<Port> order = Comparator.comparingInt((Port port) -> port.direction().ordinal())
-                .thenComparingInt(port -> port.cells().stream().mapToInt(GridPoint::y).min().orElse(0))
-                .thenComparingInt(port -> port.cells().stream().mapToInt(GridPoint::x).min().orElse(0));
-        List<Port> sorted = ports.stream().map(port -> new Port(-1, port.direction(), port.cells().stream()
-                        .map(point -> new GridPoint(point.x() - bounds.minX, point.y() - bounds.minY)).toList()))
+    private NormalizedPorts normalizePorts(List<ExposedPort> ports, Bounds bounds) {
+        Comparator<ExposedPort> order = Comparator
+                .comparingInt((ExposedPort exposed) -> exposed.port().direction().ordinal())
+                .thenComparingInt(exposed -> exposed.port().cells().stream().mapToInt(GridPoint::y).min().orElse(0))
+                .thenComparingInt(exposed -> exposed.port().cells().stream().mapToInt(GridPoint::x).min().orElse(0))
+                .thenComparingInt(ExposedPort::childInstance).thenComparingInt(ExposedPort::childPort);
+        List<ExposedPort> sorted = ports.stream().map(exposed -> new ExposedPort(
+                        new Port(-1, exposed.port().direction(), exposed.port().cells().stream()
+                                .map(point -> new GridPoint(point.x() - bounds.minX, point.y() - bounds.minY)).toList()),
+                        exposed.childInstance(), exposed.childPort()))
                 .sorted(order).toList();
-        List<Port> result = new ArrayList<>();
-        for (int i = 0; i < sorted.size(); i++)
-            result.add(new Port(i, sorted.get(i).direction(), sorted.get(i).cells()));
-        return result;
+        List<Port> normalized = new ArrayList<>();
+        List<MacroPortSource> sources = new ArrayList<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            ExposedPort exposed = sorted.get(i);
+            normalized.add(new Port(i, exposed.port().direction(), exposed.port().cells()));
+            sources.add(new MacroPortSource(i, exposed.childInstance(), exposed.childPort()));
+        }
+        return new NormalizedPorts(normalized, sources);
     }
 
     private int branchCount(Set<Integer> ids, List<MacroConnection> connections) {
