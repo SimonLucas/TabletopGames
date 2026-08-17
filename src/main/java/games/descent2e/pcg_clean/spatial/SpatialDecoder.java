@@ -15,15 +15,24 @@ public final class SpatialDecoder {
     private final int minCoordinate;
     private final int maxCoordinate;
     private final int minimumSelectedPieces;
+    private final ConnectorDepth connectorDepth;
 
     public SpatialDecoder(TileCatalog tiles, PhysicalPieceCatalog pieces, int minCoordinate, int maxCoordinate,
                           int minimumSelectedPieces) {
+        this(tiles, pieces, minCoordinate, maxCoordinate, minimumSelectedPieces, ConnectorDepth.ZERO);
+    }
+
+    public SpatialDecoder(TileCatalog tiles, PhysicalPieceCatalog pieces, int minCoordinate, int maxCoordinate,
+                          int minimumSelectedPieces, ConnectorDepth connectorDepth) {
         this.tiles = tiles;
         this.pieces = pieces;
         this.minCoordinate = minCoordinate;
         this.maxCoordinate = maxCoordinate;
         this.minimumSelectedPieces = minimumSelectedPieces;
+        this.connectorDepth = Objects.requireNonNull(connectorDepth);
     }
+
+    ConnectorDepth connectorDepth() { return connectorDepth; }
 
     public SpatialPhenotype decode(SpatialChromosome chromosome) {
         List<String> violations = new ArrayList<>();
@@ -77,7 +86,7 @@ public final class SpatialDecoder {
             PortRef b = ports.get(j);
             if (a.tile.instanceId() == b.tile.instanceId()) continue;
             if (PortGeometry.aligned(a.tile, origins.get(a.tile.instanceId()), a.port,
-                    b.tile, origins.get(b.tile.instanceId()), b.port, tiles)) {
+                    b.tile, origins.get(b.tile.instanceId()), b.port, tiles, connectorDepth)) {
                 edges.add(new TileConnection(a.tile.instanceId(), a.port, b.tile.instanceId(), b.port));
                 uses.merge(a, 1, Integer::sum);
                 uses.merge(b, 1, Integer::sum);
@@ -144,7 +153,7 @@ public final class SpatialDecoder {
     private void renderCell(PlacedTile placement, GridPoint origin, GridPoint local, Cell cell,
                             Map<GridPoint, Cell> cells, Map<GridPoint, PlacedTile> owners,
                             List<String> violations) {
-        if (cell == Cell.VOID) return;
+        if (cell == Cell.VOID || (connectorDepth == ConnectorDepth.ZERO && cell == Cell.OPEN)) return;
         GridPoint point = origin.plus(local);
         if (!inBounds(point)) violations.add("Piece " + label(placement) + " extends out of bounds at " + point);
         Cell previous = cells.putIfAbsent(point, cell);

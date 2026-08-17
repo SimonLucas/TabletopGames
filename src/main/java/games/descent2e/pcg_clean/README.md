@@ -34,6 +34,7 @@ This first version implements:
 - a connected explicit piece graph;
 - geometry-aware loop closure between coincident unused ports;
 - geometric assembly by matching opposite equal-width ports;
+- zero-depth physical connectors by default, so connected artwork edges touch rather than leaving an `open`-cell gap;
 - detection of unreachable pieces and non-opening overlaps;
 - exactly one entrance and one exit;
 - a configurable maximum board extent;
@@ -87,6 +88,8 @@ The initial renderer includes:
 
 Tile artwork is supplied through `TileArtworkProvider`. `FileTileArtworkProvider` performs case-insensitive PNG lookup (needed because the legacy assets use mixed filename case), strips generated instance suffixes, rotates images, and caches both hits and misses. Artwork is drawn over a piece's occupied terrain rectangle rather than its outer `open` connector cells, matching the dimensions used by the original viewer. Missing artwork falls back cleanly to terrain-coloured cells.
 
+The JSON `open` cells describe port direction, width and position, but do not occupy physical board space by default. `BoardLayoutEngine` and `SpatialDecoder` therefore use `ConnectorDepth.ZERO`: connected terrain cells are adjacent and the connector is invisible. Their overloads accept `ConnectorDepth.FULL_CELL` for diagnostics and legacy comparisons, where the shared connector occupies one complete grid cell.
+
 ## Framework integration
 
 No framework objects should be introduced into these classes. Once the representation and rules are mature, add a separate adapter such as `GraphBoardAdapter` that translates a feasible `BoardGenome`/`BoardLayout` into Tabletop Games components.
@@ -112,11 +115,12 @@ Selected candidates pass through a directed `SpatialRepairOperator`. Repair pres
 
 - forcing entrance and exit pieces to remain selected;
 - restoring the configured minimum piece count after destructive mutation/crossover;
+- removing at most two optional pieces when complete re-evaluation proves that each removal strictly reduces violations;
 - identifying disconnected components in the inferred graph;
 - trying compatible face, rotation and coordinate placements that attach one outside piece to the largest component;
 - accepting only attachment changes that reduce the total violation count.
 
-Repair is computationally bounded: it performs at most two component-attachment rounds and samples at most twelve compatible placements in each round. It is applied to the initial population, 20% of NSGA-II offspring and 35% of MAP-Elites emissions; ordinary mutation/crossover remains available to escape the repair operator's local preferences. This provides directed pressure without embedding an unbounded local optimiser inside every EA evaluation.
+Repair is computationally bounded: its deletion phase tries each currently selected optional piece for at most two removal rounds, it performs at most two component-attachment rounds, and it samples at most twelve compatible placements in each attachment round. A deletion is forbidden below the configured minimum piece count and can never remove the entrance or exit. It is applied to the initial population, 20% of NSGA-II offspring and 35% of MAP-Elites emissions; ordinary mutation/crossover remains available to escape the repair operator's local preferences. This provides directed pressure without embedding an unbounded local optimiser inside every EA evaluation.
 
 Two repair modes are available. `basic` is the default and performs required-piece and component-joining repair. The optional `topology` mode additionally runs a topology-aware loop closer and end-cap completion. The loop closer considers unused physical pieces with exactly two ports and places one only when its ports simultaneously match two exposed ports in the same connected component. The accepted move must strictly reduce violations and increase the graph's cyclomatic number (`edges - vertices + components`), so overlaps and multiply-used ports cannot masquerade as loops. These searches have fixed proposal budgets but cost extra phenotype decodes, so they are deliberately opt-in for long runs.
 

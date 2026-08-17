@@ -10,6 +10,7 @@ import java.util.random.RandomGenerator;
 /** Directed feasibility repair; it changes only chromosome genes, never the evaluator. */
 public final class SpatialRepairOperator {
     private static final int PROPOSAL_BUDGET = 12;
+    private static final int REMOVAL_BUDGET = 2;
     private record PortRef(PlacedTile tile, int port) {}
     private record BridgePlacement(int pieceId, int face, int turns, PlacedTile tile,
                                    Port firstPort, Port secondPort) {}
@@ -29,6 +30,7 @@ public final class SpatialRepairOperator {
 
     public SpatialChromosome repair(SpatialChromosome source, RandomGenerator random) {
         SpatialChromosome repaired = ensureRequiredSelections(source, random);
+        repaired = removeConflictingPieces(repaired, random);
         for (int attempt = 0; attempt < 2; attempt++) {
             SpatialChromosome improvement = connectOneComponent(repaired, random);
             if (improvement.equals(repaired)) break;
@@ -39,6 +41,45 @@ public final class SpatialRepairOperator {
             repaired = completeOneOpenPort(repaired, random);
         }
         return repaired;
+    }
+
+    /**
+     * Removes at most two optional pieces when a complete decode proves that doing so
+     * strictly reduces violations. Trying the whole removable set also accounts for
+     * connectivity consequences instead of guessing from overlap diagnostics alone.
+     */
+    private SpatialChromosome removeConflictingPieces(SpatialChromosome chromosome, RandomGenerator random) {
+        SpatialChromosome repaired = chromosome;
+        for (int attempt = 0; attempt < REMOVAL_BUDGET; attempt++) {
+            SpatialChromosome improvement = bestRemoval(repaired, random);
+            if (improvement.equals(repaired)) break;
+            repaired = improvement;
+        }
+        return repaired;
+    }
+
+    private SpatialChromosome bestRemoval(SpatialChromosome chromosome, RandomGenerator random) {
+        long selected = chromosome.genes().stream().filter(PieceGene::selected).count();
+        if (selected <= config.initialSelectedPieces()) return chromosome;
+        int currentViolations = decoder.decode(chromosome).violations().size();
+        Map<SpatialChromosome, Integer> improvements = new LinkedHashMap<>();
+        for (int i = 0; i < chromosome.genes().size(); i++) {
+            if (!chromosome.genes().get(i).selected() || isRequiredRole(i)) continue;
+            List<PieceGene> genes = new ArrayList<>(chromosome.genes());
+            genes.set(i, genes.get(i).withSelected(false));
+            SpatialChromosome proposal = new SpatialChromosome(genes);
+            int violations = decoder.decode(proposal).violations().size();
+            if (violations < currentViolations) improvements.put(proposal, violations);
+        }
+        int best = improvements.values().stream().mapToInt(Integer::intValue).min().orElse(currentViolations);
+        List<SpatialChromosome> bestProposals = improvements.entrySet().stream()
+                .filter(entry -> entry.getValue() == best).map(Map.Entry::getKey).toList();
+        return bestProposals.isEmpty() ? chromosome : bestProposals.get(random.nextInt(bestProposals.size()));
+    }
+
+    private boolean isRequiredRole(int pieceId) {
+        String id = pieces.pieces().get(pieceId).id();
+        return id.startsWith("entrance") || id.startsWith("exit");
     }
 
     private SpatialChromosome ensureRequiredSelections(SpatialChromosome source, RandomGenerator random) {
@@ -229,8 +270,7 @@ public final class SpatialRepairOperator {
         if (second.equals(first) || second.tile.instanceId() == first.tile.instanceId()
                 || !compatible(port(second), bridgePort)) return false;
         GridPoint origin = phenotype.layout().origins().get(second.tile.instanceId());
-        return PortGeometry.globalCells(bridgePort, bridgeOrigin).equals(
-                PortGeometry.globalCells(port(second), origin))
+        return PortGeometry.aligned(port(second), origin, bridgePort, bridgeOrigin, decoder.connectorDepth())
                 && sameComponent(phenotype, first.tile.instanceId(), second.tile.instanceId());
     }
 
@@ -321,13 +361,7 @@ public final class SpatialRepairOperator {
     }
 
     private GridPoint attachedOrigin(Port fixed, GridPoint fixedOrigin, Port moving) {
-        GridPoint target = fixed.cells().get(0).plus(fixedOrigin);
-        for (GridPoint anchor : moving.cells()) {
-            GridPoint candidate = new GridPoint(target.x() - anchor.x(), target.y() - anchor.y());
-            if (PortGeometry.globalCells(fixed, fixedOrigin).equals(PortGeometry.globalCells(moving, candidate)))
-                return candidate;
-        }
-        return null;
+        return PortGeometry.attachedOrigin(fixed, fixedOrigin, moving, decoder.connectorDepth());
     }
 
     private boolean inRange(GridPoint origin) {

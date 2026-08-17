@@ -111,7 +111,7 @@ public final class BoardCanvas extends JPanel {
             GridPoint origin = model.layout().origins().get(placement.instanceId());
             if (origin == null) continue;
             RotatedTile tile = model.tile(placement);
-            Rectangle bounds = viewport.bounds(origin, tile.width(), tile.height());
+            Rectangle bounds = occupiedTerrainBounds(tile, origin, viewport);
             g.setColor(pieceColour(placement.instanceId()));
             g.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
             if (viewport.cellSize >= 10) drawPieceLabel(g, placement, bounds);
@@ -137,7 +137,7 @@ public final class BoardCanvas extends JPanel {
             GridPoint origin = model.layout().origins().get(placement.instanceId());
             if (origin == null) continue;
             RotatedTile tile = model.tile(placement);
-            Rectangle bounds = viewport.bounds(origin, tile.width(), tile.height());
+            Rectangle bounds = occupiedTerrainBounds(tile, origin, viewport);
             centres.put(placement.instanceId(), new Point((int) bounds.getCenterX(), (int) bounds.getCenterY()));
         }
         g.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));

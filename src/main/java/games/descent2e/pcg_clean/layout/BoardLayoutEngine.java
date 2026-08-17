@@ -8,8 +8,14 @@ import java.util.*;
 /** Derives a grid embedding and a piece graph from a compact genome. */
 public final class BoardLayoutEngine {
     private final TileCatalog catalog;
+    private final ConnectorDepth connectorDepth;
 
-    public BoardLayoutEngine(TileCatalog catalog) { this.catalog = catalog; }
+    public BoardLayoutEngine(TileCatalog catalog) { this(catalog, ConnectorDepth.ZERO); }
+
+    public BoardLayoutEngine(TileCatalog catalog, ConnectorDepth connectorDepth) {
+        this.catalog = catalog;
+        this.connectorDepth = Objects.requireNonNull(connectorDepth);
+    }
 
     public BoardLayout layout(BoardGenome genome) {
         Map<Integer, PlacedTile> tiles = new LinkedHashMap<>();
@@ -35,7 +41,8 @@ public final class BoardLayoutEngine {
             if (first == null || second == null) {
                 problems.add("Connection references an unknown tile: " + edge);
             } else if (firstOrigin != null && secondOrigin != null && !PortGeometry.aligned(
-                    first, firstOrigin, edge.firstPort(), second, secondOrigin, edge.secondPort(), catalog)) {
+                    first, firstOrigin, edge.firstPort(), second, secondOrigin, edge.secondPort(),
+                    catalog, connectorDepth)) {
                 problems.add("Connection ports are not physically aligned: " + edge);
             }
         }
@@ -67,13 +74,8 @@ public final class BoardLayoutEngine {
         Port b = rotated(moving).port(movingPort);
         if (a.direction() != b.direction().opposite() || a.cells().size() != b.cells().size())
             return new GridPoint(Integer.MAX_VALUE / 4, Integer.MAX_VALUE / 4);
-        GridPoint anchorA = a.cells().get(0).plus(fixedOrigin);
-        for (GridPoint anchorB : b.cells()) {
-            GridPoint candidate = new GridPoint(anchorA.x() - anchorB.x(), anchorA.y() - anchorB.y());
-            if (PortGeometry.globalCells(a, fixedOrigin).equals(PortGeometry.globalCells(b, candidate)))
-                return candidate;
-        }
-        return new GridPoint(Integer.MAX_VALUE / 4, Integer.MAX_VALUE / 4);
+        GridPoint origin = PortGeometry.attachedOrigin(a, fixedOrigin, b, connectorDepth);
+        return origin == null ? new GridPoint(Integer.MAX_VALUE / 4, Integer.MAX_VALUE / 4) : origin;
     }
 
     private Map<GridPoint, Cell> render(Map<Integer, PlacedTile> tiles, Map<Integer, GridPoint> origins,
@@ -85,7 +87,7 @@ public final class BoardLayoutEngine {
             RotatedTile tile = rotated(placement);
             for (int y = 0; y < tile.height(); y++) for (int x = 0; x < tile.width(); x++) {
                 Cell cell = tile.cellAt(x, y);
-                if (cell == Cell.VOID) continue;
+                if (cell == Cell.VOID || (connectorDepth == ConnectorDepth.ZERO && cell == Cell.OPEN)) continue;
                 GridPoint location = origin.plus(new GridPoint(x, y));
                 Cell existing = result.putIfAbsent(location, cell);
                 if (existing != null && !(existing == Cell.OPEN && cell == Cell.OPEN))

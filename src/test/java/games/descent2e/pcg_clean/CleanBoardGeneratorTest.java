@@ -8,6 +8,7 @@ import games.descent2e.pcg_clean.evaluation.criteria.*;
 import games.descent2e.pcg_clean.evolution.*;
 import games.descent2e.pcg_clean.layout.BoardLayout;
 import games.descent2e.pcg_clean.layout.BoardLayoutEngine;
+import games.descent2e.pcg_clean.layout.ConnectorDepth;
 import games.descent2e.pcg_clean.mapelites.*;
 import games.descent2e.pcg_clean.spatial.*;
 import games.descent2e.pcg_clean.ui.*;
@@ -42,6 +43,28 @@ public class CleanBoardGeneratorTest {
         assertEquals(tile.width(), rotated.height());
         assertEquals(tile.ports().size(), rotated.ports().size());
         assertEquals(tile.ports().get(0).direction().rotate(1), rotated.ports().get(0).direction());
+    }
+
+    @Test
+    public void connectorsHaveZeroDepthByDefaultButRetainFullCellCompatibilityMode() throws Exception {
+        TileCatalog catalog = new TileCatalogLoader().load(tiles);
+        TileDefinition definition = catalog.require("2A");
+        Port north = definition.ports().stream()
+                .filter(port -> port.direction() == Direction.NORTH).findFirst().orElseThrow();
+        Port south = definition.ports().stream()
+                .filter(port -> port.direction() == Direction.SOUTH).findFirst().orElseThrow();
+        BoardGenome genome = new BoardGenome(List.of(
+                new PlacedTile(0, "2A", 0), new PlacedTile(1, "2A", 0)),
+                List.of(new TileConnection(0, north.index(), 1, south.index())));
+
+        BoardLayout zero = new BoardLayoutEngine(catalog).layout(genome);
+        BoardLayout full = new BoardLayoutEngine(catalog, ConnectorDepth.FULL_CELL).layout(genome);
+
+        assertTrue(zero.assembled());
+        assertTrue(full.assembled());
+        assertEquals(full.origins().get(1).y() + 1, zero.origins().get(1).y());
+        assertFalse(zero.cells().containsValue(Cell.OPEN));
+        assertTrue(full.cells().containsValue(Cell.OPEN));
     }
 
     @Test
@@ -237,6 +260,39 @@ public class CleanBoardGeneratorTest {
                         RandomGeneratorFactory.of("L64X128MixRandom").create(44));
         SpatialPhenotype phenotype = decoder.decode(repaired);
         assertTrue(phenotype.genome().tiles().size() >= 8);
+        assertTrue(phenotype.genome().tiles().stream()
+                .anyMatch(tile -> tile.tileId().toLowerCase().startsWith("entrance")));
+        assertTrue(phenotype.genome().tiles().stream()
+                .anyMatch(tile -> tile.tileId().toLowerCase().startsWith("exit")));
+    }
+
+    @Test
+    public void spatialRepairCanRemoveOptionalOverlappingPieces() throws Exception {
+        TileCatalog catalog = new TileCatalogLoader().load(tiles);
+        PhysicalPieceCatalog pieces = new PhysicalPieceCatalog(catalog);
+        SpatialConfig config = new SpatialConfig(10, 0, 1, 2, -14, 14, 2, 0.1, 45);
+        List<PieceGene> genes = pieces.pieces().stream()
+                .map(piece -> new PieceGene(false, 0, 0, 0, 0))
+                .collect(java.util.stream.Collectors.toList());
+        int selected = 0;
+        for (int i = 0; i < pieces.pieces().size(); i++) {
+            String id = pieces.pieces().get(i).id();
+            if (id.startsWith("entrance") || id.startsWith("exit") || id.equals("11") || id.equals("30")) {
+                genes.set(i, genes.get(i).withSelected(true));
+                selected++;
+            }
+        }
+        assertEquals(4, selected);
+        SpatialDecoder decoder = new SpatialDecoder(catalog, pieces, -14, 14, 2);
+        SpatialChromosome source = new SpatialChromosome(genes);
+        int before = decoder.decode(source).violations().size();
+
+        SpatialChromosome repaired = new SpatialRepairOperator(catalog, pieces, config, decoder)
+                .repair(source, RandomGeneratorFactory.of("L64X128MixRandom").create(45));
+        SpatialPhenotype phenotype = decoder.decode(repaired);
+
+        assertEquals(2, phenotype.genome().tiles().size());
+        assertTrue(phenotype.violations().size() < before);
         assertTrue(phenotype.genome().tiles().stream()
                 .anyMatch(tile -> tile.tileId().toLowerCase().startsWith("entrance")));
         assertTrue(phenotype.genome().tiles().stream()

@@ -11,7 +11,7 @@ public record SpatialRunSettings(Path tilePath, int population, int generations,
                                  int minimumPieces, double mutationRate, long seed, RepairMode repairMode) {
     public static SpatialRunSettings defaults() {
         return new SpatialRunSettings(Path.of("data/descent2e/tiles.json"),
-                100, 2500, 100, 3, -24, 24, 10, 0.05, 20260813L, RepairMode.BASIC);
+                100, 2500, 100, 3, -24, 24, 8, 0.03, 20260817L, RepairMode.BASIC);
     }
 
     public static SpatialRunSettings parse(String[] args) {
